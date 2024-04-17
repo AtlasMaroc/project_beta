@@ -2,7 +2,7 @@
 
 #check if the conda environement and assembly package are activated
 
-pack=$( conda info | awk -F' : ' 'NR==2 {print $2}')
+pack=$( conda info | awk -F' : ' 'NR==2 {print $2, exit}')
 
 if ! [[ $pack == assembly ]]
     then 
@@ -18,15 +18,15 @@ then
 	exit 1
 fi 
 
-#creating a read-length table: 
+#creating a read-length table for every file, to be used as input for r-script: 
 
 echo "platform, length" >length.csv
 
-#iterate of files in path provided as an argument 
+#iterate over files in path to directory provided as an argument 
 
 for file in $1
 do
 	bioawk -c fastx '{print $name, length($seq)}' $file >>length.csv 
 done 
 
-	
+#visualizing read length distrubition data using r script:	
