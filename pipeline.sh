@@ -37,7 +37,7 @@ done
 
 #visualizing read length distrubition data using r script:
 
-./readlenght.R
+./readlength.R
 
 #Approximation of  Genome size estimation using short reads:
 
@@ -74,7 +74,7 @@ for file in $path
 	awk -F"," -v len="$len" -v type="$TYPE" 'OFS=","{print $1,$2,type,(sum+0)/len; sum+=$3
 done >>contigs.length.csv
 
-
+./N50_contigs.R #visualizing cumulative coverage
         
 
 
