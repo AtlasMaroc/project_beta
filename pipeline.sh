@@ -1,8 +1,8 @@
 #!/bin/bash
 
 filesdir=$1
-shortread=$2
-
+shortread=$2 #for genome size estimation 
+busco_lin=$3 #BUSCO lineage 
 
 #check if the conda environement and assembly package are activated
 
@@ -31,13 +31,13 @@ echo "platform, length" >reads.length.csv
 
 for file in $filesdir
 do
-	bioawk -c fastx '{print $name, length($seq)}' $file >>length.csv
-        assembly-stats $file >>N50_stat_reads
+	bioawk -c fastx '{print "ONT", length($seq)}' $file >>reads.length.csv #
+        assembly-stats $file >>N50_stat_reads #assembly stats for different files
 done 
 
 #visualizing read length distrubition data using r script:
 
-./readlength.R
+./N50_reads.R
 
 #Approximation of  Genome size estimation using short reads:
 
@@ -51,16 +51,19 @@ grep -i "Estimated" kat.output.txt >>genome_size
 
 outputdirectory=assembly_files #create a directory name where the assembled contigs file will be deposited:
 
-shasta --config Nanopore-Oct2021 --threads 8 --input $1 --assemblyDirectory $outputdirectory
 
-assembly-stats $(pwd)/$outputdirectory/Assembly.fasta >>N50_stat_contigs
+for file in $files_dir 
+	do
+	shasta --config Nanopore-Oct2021 --threads 8 --input $1 --assemblyDirectory $outputdirectory_${file##*/}
 
+        assembly-stats $(pwd)/$outputdirectory_${file##*/}/Assembly.fasta >>N50_stat_contigs
+done 
 #Quality assessment:
 
 #coverage plot: 
 
 species=ONT_species
-path=$(pwd)/$outputdirectory/Assembly.fasta #genome file path
+path=$(pwd)/$outputdirectory_*/assembly.fasta #genome file path
 len=$(bioawk -c fastx '{sum+=length($seq)}END{print sum}' $path) #length of the genome assembled
 TYPE=contig #specifying genome assembly type 
 
@@ -71,11 +74,19 @@ for file in $path
 	cat $path
 	bioawk -c fastx -v  line="$species" '{print line","length($seq)","length($seq)}'
 	sort -k3rV -t ","
-	awk -F"," -v len="$len" -v type="$TYPE" 'OFS=","{print $1,$2,type,(sum+0)/len; sum+=$3
+	awk -F"," -v len="$len" -v type="$TYPE" 'OFS="," {print $1,$2,type,(sum+0)/len; sum+=$3}'
 done >>contigs.length.csv
 
-./N50_contigs.R #visualizing cumulative coverage
+#visualizing cumulative coverage
         
+./N50_contigs.R
 
+#performing Benchmarking Universal Single Copy Orthologs BUSCO:
 
+for assembly in $path
+do
+	name_1=${path#*assembly_files} 
+	name_2=${name_1%/*}
+        busco -i $assembly -c 10 -o "{$name_2}_busco"  -m genome -l "$3"
+done 
 
