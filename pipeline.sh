@@ -106,19 +106,20 @@ busco_path=$(pwd)/*_busco/short_*_busco.txt
 
 for file in $busco_path
 do
-	name_1=${file%%_busco*}
-	name_2=${name_1##*/}
-	#extract BUSCO counts for the current file:
-	cat "$file" | grep "(S)" | awk - v strain="$name_2" '{print strain","$1}' >complet_single.txt
-	cat "$file" | grep "(D)" | awk '{print $1}' >complete_duplicated.txt
-	cat "$file" | grep "(F)" | awk '{print $1}' >fragmented.txt
-	cat "$file" | grep "(M)" | awk '{print $1}' >missing.txt
-        
+	
+        name1=${file%%_busco*}
+        name2=${name1##*/}
+        #extract BUSCO counts for the current file:
+         awk -v strain="$name2" 'NR==1 { print strain","$1 }' $file >complete_single.txt; #extract the number of complet single copy genes
+         awk 'NR==2 { print $1 }' $file >complete_duplicated.txt; #extract the number of complete and duplicated genes
+         awk 'NR==3 { print $1 }' $file >fragmented.txt; #extract the number of fragmented genes
+         awk 'NR==4 { print $1 }' $file >missing.txt; #extractt the number of missing genes
+
         #Append to busco.csv
-	paste -d "," complete_single.txt complete_duplicated.txt fragmented.txt missing.txt >> busco.csv
- 
+        paste -d "," complete_single.txt complete_duplicated.txt fragmented.txt missing.txt >> busco.csv;
+
         #Clean up temporary files:
-	rm complete_single.txt complete_duplicated.txt fragmented.txt missing.txt
+        rm complete_single.txt complete_duplicated.txt fragmented.txt missing.txt;
 done
 
 
