@@ -1,5 +1,21 @@
 #!/bin/bash
 
+#check for the presence of arguments
+
+if [[ $# -eq 0 ]]
+then
+        echo "Enter the required argument"
+        exit 1
+fi
+
+if [[ -z "$1" ]] ; then echo "you must provide long reads filename"; exit 1; fi
+if [[ -z "$2" ]] ; then echo "you must provide short reads file name for genome size estimation"; exit 1; fi
+if [[ -z "$3" ]] ; then echo "you must provide BUSCO lineage"; exit 1; fi
+
+if [[ ! -f "$1" ]] ; then echo $1 "does not exist"; exit 1; fi 
+if [[ ! -f "$2" ]] ; then echo $2 "does not exist"; exit 1; fi
+if [[ ! "$3" == ?(_odb) ]] ; then echo "$3" "is not a valiable BUSCO lineage reference"; exit 1; fi 
+
 filesdir=$1
 shortread=$2 #for genome size estimation 
 busco_lin=$3 #BUSCO lineage 
@@ -13,15 +29,7 @@ if ! [[ $pack == assembly ]]
 	    echo "Please activate the conda environement and assembly first"
             exit 1
 fi
-
-#check for the presence of arguments 
-
-if [[ $# -eq 0 ]]
-then 
-	echo "Enter the required argument"
-	exit 1
-fi 
-
+ 
 #creating a read-length table and N50_stats for every file, to be used as input for r-script: 
 
 echo "platform, length" >reads.length.csv
@@ -85,8 +93,36 @@ done >>contigs.length.csv
 
 for assembly in $path
 do
-	name_1=${path#*assembly_files} 
+	name_1=${assembly#*assembly_files} 
 	name_2=${name_1%/*}
         busco -i $assembly -c 10 -o "{$name_2}_busco"  -m genome -l "$3"
 done 
+
+#parsing the BUSCO output results:
+
+echo "Strain,Complete_single_copy,Complete_duplicated,Fragmented,Missing" >busco.csv
+
+busco_path=$(pwd)/*_busco/short_*_busco.txt
+
+for file in $busco_path
+do
+	name_1=${file%%_busco*}
+	name_2=${name_1##*/}
+	#extract BUSCO counts for the current file:
+	cat "$file" | grep "(S)" | awk - v strain="$name_2" '{print strain","$1}' >complet_single.txt
+	cat "$file" | grep "(D)" | awk '{print $1}' >complete_duplicated.txt
+	cat "$file" | grep "(F)" | awk '{print $1}' >fragmented.txt
+	cat "$file" | grep "(M)" | awk '{print $1}' >missing.txt
+        
+        #Append to busco.csv
+	paste -d "," complete_single.txt complete_duplicated.txt fragmented.txt missing.txt >> busco.csv
+ 
+        #Clean up temporary files:
+	rm complete_single.txt complete_duplicated.txt fragmented.txt missing.txt
+done
+
+
+
+
+
 
