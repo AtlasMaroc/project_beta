@@ -11,20 +11,23 @@ fi
 if [[ -z "$1" ]] ; then echo "you must provide long reads filename"; exit 1; fi
 if [[ -z "$2" ]] ; then echo "you must provide short reads file name for genome size estimation"; exit 1; fi
 if [[ -z "$3" ]] ; then echo "you must provide BUSCO lineage"; exit 1; fi
+if [[ -z "$4" ]] ; then echo "you must provide a reference genome"; exit 1; fi
 
-if [[ ! -f "$1" ]] ; then echo $1 "does not exist"; exit 1; fi 
-if [[ ! -f "$2" ]] ; then echo $2 "does not exist"; exit 1; fi
-if [[ ! "$3" == ?(_odb) ]] ; then echo "$3" "is not a valiable BUSCO lineage reference"; exit 1; fi 
+if [[ ! -f "$1" ]] ; then echo "$1" "does not exist"; exit 1; fi 
+if [[ ! -f "$2" ]] ; then echo "$2" "does not exist"; exit 1; fi
+if [[ ! "$3" == ?(_odb) ]] ; then echo "$3" "is not a valiable BUSCO lineage reference"; exit 1; fi #check if #!/usr/bin/env Rscript 
+if [[ ! -f "$4" ]] ; then echo "$4" "does not exist"; exit 1; fi
 
 filesdir=$1
 shortread=$2 #for genome size estimation 
 busco_lin=$3 #BUSCO lineage 
+ref_genome=$4
 
 #check if the conda environement and assembly package are activated
 
 pack=$( conda info | awk -F' : ' 'NR==2 {print $2, exit}')
 
-if ! [[ $pack == assembly ]]
+if ! [[ $pack == "assembly" ]]
     then 
 	    echo "Please activate the conda environement and assembly first"
             exit 1
@@ -47,6 +50,7 @@ done
 
 ./N50_reads.R
 
+rm reads.length.csv
 #Approximation of  Genome size estimation using short reads:
 
 kat hist -o prefix -t 10 $2 1>kat.out.put
@@ -54,7 +58,49 @@ kat hist -o prefix -t 10 $2 1>kat.out.put
 echo "species_size" >>genome_size
 
 grep -i "Estimated" kat.output.txt >>genome_size
+#!/usr/bin/env Rscript
 
+setwd("/path/to/Input_CSV_file")
+
+library(ggplot2)
+
+library(reshape2)
+
+library(tidyverse)
+
+# Import the BUSCO table
+
+busco_df <- read.csv("busco.csv", header = TRUE)
+
+# Organize and rearrange the imported table
+
+busco_df$Strain <- as.factor(busco_df$Strain)
+
+busco_df.melted <- melt(busco_df, id.vars = "Strain")
+
+busco_df.melted$variable <-relevel(busco_df.melted$variable, "Missing")
+
+# Create a stacked bar plot for the BUSCO outputs
+
+busco_plot <- ggplot(busco_df.melted, aes(x=Strain, fill=fct_rev(variable), y=value)) +
+
+  geom_bar(position= "stack", width = 0.7, stat="identity") +
+
+  labs(x = "Strain", y = "BUSCO", fill = "Type") +
+
+  scale_y_continuous(labels=comma) +
+
+  theme_bw() +
+
+  theme(axis.text.x = element_text(angle=45, hjust=1, size = 12), axis.text.y = element_text(size = 12), axis.title=element_text(size=12))
+
+# Save the plot as “busco.pdf”
+
+pdf("busco.pdf",width=8,height=5,paper='special')
+
+print(busco_plot)
+
+dev.off()
 #ONT long read sequence-based genome assembly and N50 stats:
 
 outputdirectory=assembly_files #create a directory name where the assembled contigs file will be deposited:
@@ -64,7 +110,7 @@ for file in $files_dir
 	do
 	shasta --config Nanopore-Oct2021 --threads 8 --input $1 --assemblyDirectory $outputdirectory_${file##*/}
 
-        assembly-stats $(pwd)/$outputdirectory_${file##*/}/Assembly.fasta >>N50_stat_contigs
+        assembly-stats $(pwd)/$outputdirectory_${file##*/}/assembly.fasta >>N50_stat_contigs
 done 
 #Quality assessment:
 
@@ -122,8 +168,34 @@ do
         rm complete_single.txt complete_duplicated.txt fragmented.txt missing.txt;
 done
 
+#visualize the results using R script:
 
+./busco.R
 
+#building Scaffolds:
+
+for file in "$path"
+do
+     name1=${file#*assembly_files}
+     name2=${name1%/*}
+     ragtag.py scaffold -t 10 -u -o $name2 $ref_genome $filed #final scaffold output will be saved in $name2/ragtag.scaffold.fasta
+done      
+
+#discovery of structural variation:
+#first-step aligning your assembly to a rference genome:
+ for file in "$path"
+ do 
+	 name_1=${file#*assembly_files}
+	 name_2=${file%/*}
+
+	 minimap2 -a -x asm5 --cs -r2k -t 10 "$ref_genome" $file
+	 samtools sort -m4G -@ 10 -O BAM -o ${ref_genome}_${name_2}.bam
+         sametools index ${ref_genome}_${name_2}.bam
+done
+
+#second-step: perform SV calling using SVIM-asm:
+ 
+svim-asm haploid output_folder_name genome2_to_genome1.bam genome1.fa
 
 
 
